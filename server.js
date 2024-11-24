@@ -5,6 +5,9 @@ const cors = require('cors');
 const mongoose = require('mongoose'); // Import mongoose
 const bcrypt = require('bcryptjs'); // Import bcrypt
 const jwt = require('jsonwebtoken'); // Import jsonwebtoken
+const axios = require('axios');
+const multer = require('multer');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -25,7 +28,9 @@ app.use(bodyParser.json());
 // Define a Mongoose schema for users
 const userSchema = new mongoose.Schema({
     username: { type: String, required: true, unique: true },
-    password: { type: String, required: true }
+    password: { type: String, required: true },
+    emergencyContacts: [{ type: String }],
+    profileImage: { type: String }
 });
 
 // Create a Mongoose model for users
@@ -43,6 +48,16 @@ const Alert = mongoose.model('Alert', alertSchema);
 
 // In-memory storage for user locations (for demonstration purposes)
 const userLocations = {}; // { userId: { latitude, longitude } }
+
+// Set up multer for file uploads
+const storage = multer.diskStorage({
+    destination: './uploads/',
+    filename: (req, file, cb) => {
+        cb(null, `${req.user.id}${path.extname(file.originalname)}`);
+    }
+});
+
+const upload = multer({ storage });
 
 // Endpoint to register a new user
 app.post('/api/register', async (req, res) => {
@@ -126,7 +141,7 @@ app.post('/api/alerts', authenticateToken, async (req, res) => {
             location: loc,
         }));
 
-        res.status(201).json({ message: 'Alert sent!', alert, nearbyUsers: nearbyUserDetails });
+        res.status(201).json({ message: 'Bachao Bachao!', alert, nearbyUsers: nearbyUserDetails });
     } catch (error) {
         console.error('Error saving alert:', error); // Log error
         res.status(500).json({ message: 'Error saving alert', error });
@@ -138,7 +153,7 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371; // Radius of the Earth in km
     const dLat = (lat2 - lat1) * (Math.PI / 180);
     const dLon = (lon2 - lon1) * (Math.PI / 180);
-    const a = 
+    const a =
         Math.sin(dLat / 2) * Math.sin(dLat / 2) +
         Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
         Math.sin(dLon / 2) * Math.sin(dLon / 2);
@@ -154,6 +169,114 @@ app.get('/api/alerts', authenticateToken, async (req, res) => {
         res.json(alerts);
     } catch (error) {
         res.status(500).json({ message: 'Error retrieving alerts', error });
+    }
+});
+
+const sendNotification = async (userIds, message) => {
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Basic dqkmxpaiyemznvnpuixvbtyir',
+    };
+
+    const data = {
+        app_id: '9602db57-3f2b-47eb-aebd-2fcdd8c16d2e',
+        include_external_user_ids: userIds, // Array of user IDs
+        contents: { en: message },
+    };
+
+    try {
+        const response = await axios.post('https://onesignal.com/api/v1/notifications', data, { headers });
+        console.log('Notification sent:', response.data); // Log the response from OneSignal
+        return response.data;
+    } catch (error) {
+        console.error('Error sending notification:', error); // Log any errors
+        throw error;
+    }
+};
+
+// Example usage in an endpoint
+app.post('/api/send-notification', async (req, res) => {
+    const { userIds, message } = req.body;
+    try {
+        const result = await sendNotification(userIds, message);
+        res.status(200).json({ message: 'Notification sent', result });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to send notification', error });
+    }
+});
+
+// Endpoint to save emergency contacts
+app.post('/api/save-contacts', authenticateToken, async (req, res) => {
+    const { contacts } = req.body;
+
+    try {
+        await User.findByIdAndUpdate(req.user.id, { emergencyContacts: contacts });
+        res.status(200).json({ message: 'Contacts saved successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error saving contacts', error });
+    }
+});
+
+// Endpoint to upload profile image
+app.post('/api/upload-profile-image', authenticateToken, upload.single('profileImage'), async (req, res) => {
+    try {
+        const imagePath = `/uploads/${req.file.filename}`;
+        const result = await User.findByIdAndUpdate(req.user.id, { profileImage: imagePath });
+        console.log('Update result:', result);
+        res.status(200).json({ message: 'Profile image uploaded successfully', imagePath });
+    } catch (error) {
+        console.error('Error uploading profile image:', error);
+        res.status(500).json({ message: 'Error uploading profile image', error });
+    }
+});
+
+app.get('/api/user-profile', authenticateToken, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        res.json({ profileImage: user.profileImage });
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching profile image', error });
+    }
+});
+
+const messageSchema = new mongoose.Schema({
+    text: String,
+    userId: String,
+    username: String,
+    timestamp: { type: Date, default: Date.now }
+});
+
+const Message = mongoose.model('Message', messageSchema);
+
+app.get('/api/messages', authenticateToken, async (req, res) => {
+    try {
+        const messages = await Message.find().sort({ timestamp: 1 });
+        res.json(messages);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching messages', error });
+    }
+});
+
+app.post('/api/messages', authenticateToken, async (req, res) => {
+    const { text } = req.body;
+    const user = await User.findById(req.user.id); // Get the user to retrieve the username
+
+    if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+    }
+
+    console.log('User found:', user); // Log the user object
+
+    const message = new Message({ text, userId: req.user.id, username: user.username }); // Include username
+
+    try {
+        await message.save();
+        res.status(201).json(message); // Ensure this includes the username
+    } catch (error) {
+        res.status(500).json({ message: 'Error saving message', error });
     }
 });
 

@@ -10,12 +10,17 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "axios": "^1.7.7",
     "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.3",
     "cors": "^2.8.5",
     "express": "^4.21.1",
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.10.0",
-    "mongoose": "^8.8.2"
+    "mongoose": "^8.8.2",
+    "multer": "^1.4.5-lts.1",
+    "react-native-image-picker": "^7.1.2",
+    "react-native-onesignal": "^5.2.6",
+    "react-native-webview": "^13.12.4"
   }
 }
