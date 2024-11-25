@@ -41,8 +41,8 @@ const userSchema = new mongoose.Schema({
     profileImage: { type: String }
 });
 
-// Create a Mongoose model for users
-const User = mongoose.model('User', userSchema);
+// Create a Mongoose model for users, checking if it already exists
+const User = mongoose.models.User || mongoose.model('User', userSchema);
 
 // Define a Mongoose schema for alerts
 const alertSchema = new mongoose.Schema({
