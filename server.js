@@ -16,9 +16,17 @@ const PORT = process.env.PORT || 5000;
 const mongoURI = 'mongodb+srv://1ep22cs116:Vaibhav123@mycluster.z4vvm.mongodb.net/women_safety?retryWrites=true&w=majority';
 
 // Connect to MongoDB
-mongoose.connect(mongoURI)
-    .then(() => console.log('MongoDB connected'))
-    .catch(err => console.error('MongoDB connection error:', err));
+const connectToDatabase = async () => {
+    try {
+        await mongoose.connect(mongoURI);
+        console.log('MongoDB connected');
+    } catch (err) {
+        console.error('MongoDB connection error:', err);
+        process.exit(1); // Exit the process if the connection fails
+    }
+};
+
+connectToDatabase();
 
 app.use(cors({
     origin: '*', // Allow all origins (for development only)
